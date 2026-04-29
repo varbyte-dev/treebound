@@ -91,6 +91,16 @@ jobs:
         env:
           AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
         run: |
+          # Validar que el secret es un PAT raw, no un valor ya encodeado en base64.
+          # Un PAT de Azure DevOps tiene exactamente 52 chars alfanuméricos.
+          # Si el secret tiene más de 80 chars probablemente ya está en base64.
+          PAT_LEN=${#AZURE_PAT}
+          if [ "$PAT_LEN" -gt 80 ]; then
+            echo "::error::AZURE_ARTIFACTS_PAT parece estar en base64 (longitud: ${PAT_LEN})."
+            echo "::error::El secret debe ser el PAT raw de Azure DevOps, no el valor _password= del .npmrc."
+            exit 1
+          fi
+
           ENCODED=$(printf ':%s' "$AZURE_PAT" | base64 | tr -d '\n')
           REGISTRY="//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm"
 
@@ -103,30 +113,16 @@ jobs:
           printf '%s/:email=ci@varbyte.dev\n'  "$REGISTRY"             >> ~/.npmrc
           printf '%s/:always-auth=true\n'      "$REGISTRY"             >> ~/.npmrc
 
-      - name: Debug — verify .npmrc content (token redacted)
-        run: |
-          echo "=== ~/.npmrc (passwords redacted) ==="
-          sed 's/_password=.*/_password=<REDACTED>/' ~/.npmrc
-          echo ""
-          echo "=== project .npmrc ==="
-          cat .npmrc
-          echo ""
-          echo "=== npm config list ==="
-          npm config list
-
       - name: Verify registry access
         env:
           AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
         run: |
-          # npm ping con --registry ignora el ~/.npmrc para auth.
-          # Hay que pasar el header directamente via npm_config_ vars.
           ENCODED=$(printf ':%s' "$AZURE_PAT" | base64 | tr -d '\n')
           npm ping \
             --registry https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/ \
-            --//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:_password="$ENCODED" \
-            --//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:username=varbytedev \
-            --//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:always-auth=true \
-            || echo "::warning::Registry ping failed — verifica el scope del PAT: Packaging Read & Write"
+            "--//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:_password=$ENCODED" \
+            "--//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:username=varbytedev" \
+            "--//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:always-auth=true"
 
       - name: Release
         id: release
