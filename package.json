@@ -1,0 +1,65 @@
+{
+  "name": "@varbyte/treebound",
+  "version": "1.0.0",
+  "description": "Reactive binding engine for Custom Elements using TreeWalker — zero dependencies, no eval()",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.es.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "benchmark": "tsx benchmarks/bench.ts",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "playground": "vite",
+    "playground:build": "vite build",
+    "prepublishOnly": "npm run test && npm run build"
+  },
+  "keywords": [
+    "custom-elements",
+    "web-components",
+    "binding",
+    "reactive",
+    "treewalker",
+    "dom",
+    "no-eval",
+    "zero-dependency"
+  ],
+  "author": "VarByte",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/varbyte/treebound"
+  },
+  "bugs": {
+    "url": "https://github.com/varbyte/treebound/issues"
+  },
+  "homepage": "https://github.com/varbyte/treebound#readme",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@vitest/coverage-v8": "^4.1.5",
+    "jsdom": "^26.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.0",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5"
+  }
+}
