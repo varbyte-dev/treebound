@@ -91,16 +91,10 @@ jobs:
         env:
           AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
         run: |
-          # Validar que el secret es un PAT raw, no un valor ya encodeado en base64.
-          # Un PAT de Azure DevOps tiene exactamente 52 chars alfanuméricos.
-          # Si el secret tiene más de 80 chars probablemente ya está en base64.
-          PAT_LEN=${#AZURE_PAT}
-          if [ "$PAT_LEN" -gt 80 ]; then
-            echo "::error::AZURE_ARTIFACTS_PAT parece estar en base64 (longitud: ${PAT_LEN})."
-            echo "::error::El secret debe ser el PAT raw de Azure DevOps, no el valor _password= del .npmrc."
-            exit 1
-          fi
-
+          # El secret AZURE_ARTIFACTS_PAT debe ser el PAT raw de Azure DevOps.
+          # NO en base64 — el workflow hace base64(":<PAT>") aquí mismo.
+          # Para obtener el PAT raw si solo tienes el base64:
+          #   echo "<tu_base64>" | base64 -d
           ENCODED=$(printf ':%s' "$AZURE_PAT" | base64 | tr -d '\n')
           REGISTRY="//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm"
 
