@@ -7,15 +7,15 @@ on:
       - beta
       - alpha
 
-# Solo puede correr una release a la vez
 concurrency:
   group: release
   cancel-in-progress: false
 
 permissions:
-  contents: write        # crear tags y commits de release
-  issues: write          # comentar en issues relacionados
-  pull-requests: write   # comentar en PRs relacionados
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write   # npm provenance
 
 jobs:
   test:
@@ -34,13 +34,8 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      # En CI no hay credenciales de Azure — instalamos sin el registry de Azure
-      # ya que todas las deps están en npm público
       - name: Install dependencies
-        run: npm ci --ignore-scripts
-        env:
-          # Evitar que npm intente autenticar contra Azure para instalar devDeps
-          npm_config_registry: https://registry.npmjs.org/
+        run: npm ci
 
       - name: Type check
         run: npx tsc --noEmit
@@ -49,10 +44,10 @@ jobs:
         run: npm run test:coverage
 
   release:
-    name: Semantic Release → Azure Artifacts
+    name: Semantic Release → npm
     runs-on: ubuntu-latest
     needs: test
-    environment: azure-publish
+    environment: npm-publish
 
     outputs:
       released: ${{ steps.release.outputs.new_release_published }}
@@ -71,67 +66,13 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: npm ci --ignore-scripts
-        env:
-          npm_config_registry: https://registry.npmjs.org/
+        run: npm ci
 
       - name: Build
         run: npm run build
-
-      # Azure Artifacts autentica con un PAT de Azure DevOps.
-      # El token se codifica en base64 del string ":<PAT>" (con los dos puntos).
-      # Se escribe en ~/.npmrc en runtime — nunca en el repo.
-      #
-      # IMPORTANTE: el heredoc usa printf línea a línea para evitar que la
-      # indentación del YAML introduzca espacios en las claves del .npmrc,
-      # lo que causaría un 401 silencioso.
-      - name: Configure Azure Artifacts authentication
-        env:
-          AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
-        run: |
-          # Azure Artifacts espera base64(PAT) — sin los dos puntos.
-          # El secret AZURE_ARTIFACTS_PAT debe ser el PAT raw de Azure DevOps.
-          ENCODED=$(printf '%s' "$AZURE_PAT" | base64 | tr -d '\n')
-          REGISTRY="//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm"
-
-          printf '%s:username=varbytedev\n'                             "${REGISTRY}/registry/" >> ~/.npmrc
-          printf '%s:_password=%s\n'           "${REGISTRY}/registry/"  "$ENCODED"              >> ~/.npmrc
-          printf '%s:email=npm requires email to be set but doesnt use the value\n' "${REGISTRY}/registry/" >> ~/.npmrc
-          printf '%s/:username=varbytedev\n'                            "$REGISTRY"             >> ~/.npmrc
-          printf '%s/:_password=%s\n'          "$REGISTRY"              "$ENCODED"              >> ~/.npmrc
-          printf '%s/:email=npm requires email to be set but doesnt use the value\n' "$REGISTRY" >> ~/.npmrc
-
-      # Azure Artifacts no implementa /-/ping (es exclusivo de npmjs.com).
-      # Verificamos acceso real con una petición HTTP autenticada al registry.
-      - name: Verify registry access
-        env:
-          AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
-        run: |
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -u "varbytedev:${AZURE_PAT}" \
-            "https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/")
-
-          echo "Registry HTTP status: $HTTP_STATUS"
-
-          if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "401" ]; then
-            # 200 = acceso OK, 401 = registry existe pero credenciales inválidas
-            # En ambos casos el registry responde — 404 significaría que la URL es incorrecta
-            echo "Registry URL is reachable (status: $HTTP_STATUS)"
-          fi
-
-          if [ "$HTTP_STATUS" = "401" ]; then
-            echo "::error::Authentication failed (401). Verify AZURE_ARTIFACTS_PAT has Packaging: Read & Write scope."
-            exit 1
-          fi
-
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "::error::Unexpected status $HTTP_STATUS — verify the registry URL."
-            exit 1
-          fi
-
-          echo "✓ Registry access verified"
 
       - name: Release
         id: release
@@ -144,10 +85,7 @@ jobs:
             conventional-changelog-conventionalcommits@8
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          # semantic-release/npm lee NPM_TOKEN como _authToken
-          # Para Azure usamos _password, así que desactivamos el NPM_TOKEN
-          # y dejamos que el .npmrc del HOME maneje la autenticación
-          NPM_TOKEN: ${{ secrets.AZURE_ARTIFACTS_PAT }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Release summary
         if: steps.release.outputs.new_release_published == 'true'
@@ -157,7 +95,7 @@ jobs:
           echo "**Version:** \`${{ steps.release.outputs.new_release_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Channel:** \`${{ steps.release.outputs.new_release_channel || 'latest' }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📦 [Azure Artifacts — varbytedev feed](https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/)" >> $GITHUB_STEP_SUMMARY
+          echo "📦 [@varbyte/treebound on npm](https://www.npmjs.com/package/@varbyte/treebound)" >> $GITHUB_STEP_SUMMARY
 
       - name: No release
         if: steps.release.outputs.new_release_published == 'false'
