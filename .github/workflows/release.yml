@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - beta
+      - alpha
+
+# Solo puede correr una release a la vez
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # crear tags y commits de release
+  issues: write          # comentar en issues relacionados
+  pull-requests: write   # comentar en PRs relacionados
+  id-token: write        # necesario para npm provenance
+
+jobs:
+  test:
+    name: Test before release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # semantic-release necesita todo el historial de tags
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm run test:coverage
+
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    needs: test
+    environment: npm-publish   # entorno con los secrets protegidos
+
+    outputs:
+      released:        ${{ steps.release.outputs.new_release_published }}
+      version:         ${{ steps.release.outputs.new_release_version }}
+      major:           ${{ steps.release.outputs.new_release_major_version }}
+      minor:           ${{ steps.release.outputs.new_release_minor_version }}
+      patch:           ${{ steps.release.outputs.new_release_patch_version }}
+      release_channel: ${{ steps.release.outputs.new_release_channel }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Usar un token con permisos de push para que el commit de release
+          # pueda disparar otros workflows si es necesario
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Release
+        id: release
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          semantic_version: 25
+          extra_plugins: |
+            @semantic-release/git@10
+            @semantic-release/changelog@6
+            conventional-changelog-conventionalcommits@8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Release summary
+        if: steps.release.outputs.new_release_published == 'true'
+        run: |
+          echo "## 🚀 Released!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ steps.release.outputs.new_release_version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Channel:** \`${{ steps.release.outputs.new_release_channel || 'latest' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 [@varbyte/treebound on npm](https://www.npmjs.com/package/@varbyte/treebound)" >> $GITHUB_STEP_SUMMARY
+
+      - name: No release
+        if: steps.release.outputs.new_release_published == 'false'
+        run: |
+          echo "## ℹ️ No release triggered" >> $GITHUB_STEP_SUMMARY
+          echo "No commits since last release trigger a version bump." >> $GITHUB_STEP_SUMMARY
