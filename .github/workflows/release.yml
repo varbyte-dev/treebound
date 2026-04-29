@@ -81,22 +81,27 @@ jobs:
         run: npm run build
 
       # Azure Artifacts autentica con un PAT de Azure DevOps.
-      # El token debe estar en base64 del string ":<PAT>" (con los dos puntos).
-      # Lo construimos aquí en runtime — nunca en el repo.
+      # El token se codifica en base64 del string ":<PAT>" (con los dos puntos).
+      # Se escribe en ~/.npmrc en runtime — nunca en el repo.
+      #
+      # IMPORTANTE: el heredoc usa printf línea a línea para evitar que la
+      # indentación del YAML introduzca espacios en las claves del .npmrc,
+      # lo que causaría un 401 silencioso.
       - name: Configure Azure Artifacts authentication
+        env:
+          AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
         run: |
-          REGISTRY_URL="//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/"
-          ENCODED=$(echo -n ":${{ secrets.AZURE_ARTIFACTS_PAT }}" | base64)
+          ENCODED=$(printf ':%s' "$AZURE_PAT" | base64 | tr -d '\n')
+          REGISTRY="//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm"
 
-          # Escribir auth en el .npmrc del HOME (no sobreescribe el del proyecto)
-          cat >> ~/.npmrc << EOF
-          ${REGISTRY_URL}:username=varbytedev
-          ${REGISTRY_URL}:_password=${ENCODED}
-          ${REGISTRY_URL}:email=ci@varbyte.dev
-          //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/:username=varbytedev
-          //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/:_password=${ENCODED}
-          //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/:email=ci@varbyte.dev
-          EOF
+          printf '%s:username=varbytedev\n'    "${REGISTRY}/registry/" >> ~/.npmrc
+          printf '%s:_password=%s\n'           "${REGISTRY}/registry/" "$ENCODED" >> ~/.npmrc
+          printf '%s:email=ci@varbyte.dev\n'   "${REGISTRY}/registry/" >> ~/.npmrc
+          printf '%s:always-auth=true\n'       "${REGISTRY}/registry/" >> ~/.npmrc
+          printf '%s/:username=varbytedev\n'   "$REGISTRY"             >> ~/.npmrc
+          printf '%s/:_password=%s\n'          "$REGISTRY"             "$ENCODED" >> ~/.npmrc
+          printf '%s/:email=ci@varbyte.dev\n'  "$REGISTRY"             >> ~/.npmrc
+          printf '%s/:always-auth=true\n'      "$REGISTRY"             >> ~/.npmrc
 
       - name: Verify registry access
         run: |
