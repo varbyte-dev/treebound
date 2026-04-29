@@ -43,12 +43,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/varbyte/treebound"
+    "url": "https://github.com/varbyte-dev/treebound"
   },
   "bugs": {
-    "url": "https://github.com/varbyte/treebound/issues"
+    "url": "https://github.com/varbyte-dev/treebound/issues"
   },
-  "homepage": "https://github.com/varbyte/treebound#readme",
+  "homepage": "https://github.com/varbyte-dev/treebound#readme",
   "sideEffects": false,
   "publishConfig": {
     "registry": "https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/"
