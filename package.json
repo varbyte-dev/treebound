@@ -19,15 +19,15 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
+    "prepare": "npm run build",
     "benchmark": "tsx benchmarks/bench.ts",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "playground": "vite",
-    "playground:build": "vite build",
-    "prepublishOnly": "npm run test && npm run build"
+    "playground:build": "vite build"
   },
   "keywords": [
     "custom-elements",
