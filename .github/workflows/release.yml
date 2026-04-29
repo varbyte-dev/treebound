@@ -91,27 +91,23 @@ jobs:
         env:
           AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
         run: |
+          # Azure Artifacts espera base64(PAT) — sin los dos puntos.
           # El secret AZURE_ARTIFACTS_PAT debe ser el PAT raw de Azure DevOps.
-          # NO en base64 — el workflow hace base64(":<PAT>") aquí mismo.
-          # Para obtener el PAT raw si solo tienes el base64:
-          #   echo "<tu_base64>" | base64 -d
-          ENCODED=$(printf ':%s' "$AZURE_PAT" | base64 | tr -d '\n')
+          ENCODED=$(printf '%s' "$AZURE_PAT" | base64 | tr -d '\n')
           REGISTRY="//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm"
 
-          printf '%s:username=varbytedev\n'    "${REGISTRY}/registry/" >> ~/.npmrc
-          printf '%s:_password=%s\n'           "${REGISTRY}/registry/" "$ENCODED" >> ~/.npmrc
-          printf '%s:email=ci@varbyte.dev\n'   "${REGISTRY}/registry/" >> ~/.npmrc
-          printf '%s:always-auth=true\n'       "${REGISTRY}/registry/" >> ~/.npmrc
-          printf '%s/:username=varbytedev\n'   "$REGISTRY"             >> ~/.npmrc
-          printf '%s/:_password=%s\n'          "$REGISTRY"             "$ENCODED" >> ~/.npmrc
-          printf '%s/:email=ci@varbyte.dev\n'  "$REGISTRY"             >> ~/.npmrc
-          printf '%s/:always-auth=true\n'      "$REGISTRY"             >> ~/.npmrc
+          printf '%s:username=varbytedev\n'                             "${REGISTRY}/registry/" >> ~/.npmrc
+          printf '%s:_password=%s\n'           "${REGISTRY}/registry/"  "$ENCODED"              >> ~/.npmrc
+          printf '%s:email=npm requires email to be set but doesnt use the value\n' "${REGISTRY}/registry/" >> ~/.npmrc
+          printf '%s/:username=varbytedev\n'                            "$REGISTRY"             >> ~/.npmrc
+          printf '%s/:_password=%s\n'          "$REGISTRY"              "$ENCODED"              >> ~/.npmrc
+          printf '%s/:email=npm requires email to be set but doesnt use the value\n' "$REGISTRY" >> ~/.npmrc
 
       - name: Verify registry access
         env:
           AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
         run: |
-          ENCODED=$(printf ':%s' "$AZURE_PAT" | base64 | tr -d '\n')
+          ENCODED=$(printf '%s' "$AZURE_PAT" | base64 | tr -d '\n')
           npm ping \
             --registry https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/ \
             "--//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:_password=$ENCODED" \
