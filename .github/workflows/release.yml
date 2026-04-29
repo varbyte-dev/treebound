@@ -103,10 +103,30 @@ jobs:
           printf '%s/:email=ci@varbyte.dev\n'  "$REGISTRY"             >> ~/.npmrc
           printf '%s/:always-auth=true\n'      "$REGISTRY"             >> ~/.npmrc
 
-      - name: Verify registry access
+      - name: Debug — verify .npmrc content (token redacted)
         run: |
-          npm ping --registry https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/ \
-            || echo "::warning::Registry ping failed — check PAT permissions (Packaging: Read & Write)"
+          echo "=== ~/.npmrc (passwords redacted) ==="
+          sed 's/_password=.*/_password=<REDACTED>/' ~/.npmrc
+          echo ""
+          echo "=== project .npmrc ==="
+          cat .npmrc
+          echo ""
+          echo "=== npm config list ==="
+          npm config list
+
+      - name: Verify registry access
+        env:
+          AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
+        run: |
+          # npm ping con --registry ignora el ~/.npmrc para auth.
+          # Hay que pasar el header directamente via npm_config_ vars.
+          ENCODED=$(printf ':%s' "$AZURE_PAT" | base64 | tr -d '\n')
+          npm ping \
+            --registry https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/ \
+            --//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:_password="$ENCODED" \
+            --//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:username=varbytedev \
+            --//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:always-auth=true \
+            || echo "::warning::Registry ping failed — verifica el scope del PAT: Packaging Read & Write"
 
       - name: Release
         id: release
