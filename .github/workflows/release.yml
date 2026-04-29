@@ -66,7 +66,8 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
+          # Sin registry-url: evita que setup-node genere un .npmrc temporal
+          # con always-auth=true que interfiere con el NPM_TOKEN de semantic-release.
 
       - name: Install dependencies
         run: npm ci
@@ -78,22 +79,19 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          # Verificar que el token tiene el formato correcto antes de intentar publicar.
-          # Los Automation tokens de npmjs.com tienen el formato: npm_XXXX... (36 chars después del prefijo)
           if [[ ! "$NPM_TOKEN" =~ ^npm_ ]]; then
-            echo "::error::NPM_TOKEN no tiene el formato esperado (debe empezar con 'npm_')."
-            echo "::error::Ve a npmjs.com → Avatar → Access Tokens → Generate New Token → Automation"
+            echo "::error::NPM_TOKEN debe empezar con 'npm_'. Ve a npmjs.com → Access Tokens → Generate New Token → Automation."
             exit 1
           fi
-          # Verificar que el token es válido contra la API de npm
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          # Verificar con curl directamente — sin depender del .npmrc del runner
+          WHOAMI=$(curl -sf \
             -H "Authorization: Bearer $NPM_TOKEN" \
-            https://registry.npmjs.org/-/whoami)
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "::error::NPM_TOKEN inválido o revocado (HTTP $HTTP_STATUS). Genera un nuevo Automation token en npmjs.com."
+            https://registry.npmjs.org/-/whoami 2>/dev/null | grep -o '"username":"[^"]*"' | cut -d'"' -f4)
+          if [ -z "$WHOAMI" ]; then
+            echo "::error::NPM_TOKEN inválido o revocado. Genera un nuevo Automation token en npmjs.com."
             exit 1
           fi
-          echo "✓ npm token válido"
+          echo "✓ Token válido — usuario: $WHOAMI"
 
       - name: Release
         id: release
