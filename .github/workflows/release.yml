@@ -103,16 +103,35 @@ jobs:
           printf '%s/:_password=%s\n'          "$REGISTRY"              "$ENCODED"              >> ~/.npmrc
           printf '%s/:email=npm requires email to be set but doesnt use the value\n' "$REGISTRY" >> ~/.npmrc
 
+      # Azure Artifacts no implementa /-/ping (es exclusivo de npmjs.com).
+      # Verificamos acceso real con una petición HTTP autenticada al registry.
       - name: Verify registry access
         env:
           AZURE_PAT: ${{ secrets.AZURE_ARTIFACTS_PAT }}
         run: |
-          ENCODED=$(printf '%s' "$AZURE_PAT" | base64 | tr -d '\n')
-          npm ping \
-            --registry https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/ \
-            "--//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:_password=$ENCODED" \
-            "--//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:username=varbytedev" \
-            "--//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:always-auth=true"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -u "varbytedev:${AZURE_PAT}" \
+            "https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/")
+
+          echo "Registry HTTP status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "401" ]; then
+            # 200 = acceso OK, 401 = registry existe pero credenciales inválidas
+            # En ambos casos el registry responde — 404 significaría que la URL es incorrecta
+            echo "Registry URL is reachable (status: $HTTP_STATUS)"
+          fi
+
+          if [ "$HTTP_STATUS" = "401" ]; then
+            echo "::error::Authentication failed (401). Verify AZURE_ARTIFACTS_PAT has Packaging: Read & Write scope."
+            exit 1
+          fi
+
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::error::Unexpected status $HTTP_STATUS — verify the registry URL."
+            exit 1
+          fi
+
+          echo "✓ Registry access verified"
 
       - name: Release
         id: release
