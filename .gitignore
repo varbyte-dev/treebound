@@ -30,3 +30,5 @@ npm-debug.log*
 # Env
 .env
 .env.local
+# NO ignorar .npmrc del proyecto — solo tiene la URL del registry, sin credenciales.
+# Las credenciales van en ~/.npmrc (local de cada desarrollador) y en GitHub Secrets.

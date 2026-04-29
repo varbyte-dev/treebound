@@ -16,7 +16,6 @@ permissions:
   contents: write        # crear tags y commits de release
   issues: write          # comentar en issues relacionados
   pull-requests: write   # comentar en PRs relacionados
-  id-token: write        # necesario para npm provenance
 
 jobs:
   test:
@@ -27,7 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # semantic-release necesita todo el historial de tags
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,8 +34,13 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # En CI no hay credenciales de Azure — instalamos sin el registry de Azure
+      # ya que todas las deps están en npm público
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+        env:
+          # Evitar que npm intente autenticar contra Azure para instalar devDeps
+          npm_config_registry: https://registry.npmjs.org/
 
       - name: Type check
         run: npx tsc --noEmit
@@ -45,26 +49,21 @@ jobs:
         run: npm run test:coverage
 
   release:
-    name: Semantic Release
+    name: Semantic Release → Azure Artifacts
     runs-on: ubuntu-latest
     needs: test
-    environment: npm-publish   # entorno con los secrets protegidos
+    environment: azure-publish
 
     outputs:
-      released:        ${{ steps.release.outputs.new_release_published }}
-      version:         ${{ steps.release.outputs.new_release_version }}
-      major:           ${{ steps.release.outputs.new_release_major_version }}
-      minor:           ${{ steps.release.outputs.new_release_minor_version }}
-      patch:           ${{ steps.release.outputs.new_release_patch_version }}
-      release_channel: ${{ steps.release.outputs.new_release_channel }}
+      released: ${{ steps.release.outputs.new_release_published }}
+      version:  ${{ steps.release.outputs.new_release_version }}
+      channel:  ${{ steps.release.outputs.new_release_channel }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Usar un token con permisos de push para que el commit de release
-          # pueda disparar otros workflows si es necesario
           token: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Node.js
@@ -74,10 +73,35 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+        env:
+          npm_config_registry: https://registry.npmjs.org/
 
       - name: Build
         run: npm run build
+
+      # Azure Artifacts autentica con un PAT de Azure DevOps.
+      # El token debe estar en base64 del string ":<PAT>" (con los dos puntos).
+      # Lo construimos aquí en runtime — nunca en el repo.
+      - name: Configure Azure Artifacts authentication
+        run: |
+          REGISTRY_URL="//pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/"
+          ENCODED=$(echo -n ":${{ secrets.AZURE_ARTIFACTS_PAT }}" | base64)
+
+          # Escribir auth en el .npmrc del HOME (no sobreescribe el del proyecto)
+          cat >> ~/.npmrc << EOF
+          ${REGISTRY_URL}:username=varbytedev
+          ${REGISTRY_URL}:_password=${ENCODED}
+          ${REGISTRY_URL}:email=ci@varbyte.dev
+          //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/:username=varbytedev
+          //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/:_password=${ENCODED}
+          //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/:email=ci@varbyte.dev
+          EOF
+
+      - name: Verify registry access
+        run: |
+          npm ping --registry https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/ \
+            || echo "::warning::Registry ping failed — check PAT permissions (Packaging: Read & Write)"
 
       - name: Release
         id: release
@@ -90,7 +114,10 @@ jobs:
             conventional-changelog-conventionalcommits@8
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # semantic-release/npm lee NPM_TOKEN como _authToken
+          # Para Azure usamos _password, así que desactivamos el NPM_TOKEN
+          # y dejamos que el .npmrc del HOME maneje la autenticación
+          NPM_TOKEN: ${{ secrets.AZURE_ARTIFACTS_PAT }}
 
       - name: Release summary
         if: steps.release.outputs.new_release_published == 'true'
@@ -100,7 +127,7 @@ jobs:
           echo "**Version:** \`${{ steps.release.outputs.new_release_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Channel:** \`${{ steps.release.outputs.new_release_channel || 'latest' }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📦 [@varbyte/treebound on npm](https://www.npmjs.com/package/@varbyte/treebound)" >> $GITHUB_STEP_SUMMARY
+          echo "📦 [Azure Artifacts — varbytedev feed](https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/)" >> $GITHUB_STEP_SUMMARY
 
       - name: No release
         if: steps.release.outputs.new_release_published == 'false'

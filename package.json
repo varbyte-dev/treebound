@@ -50,6 +50,9 @@
   },
   "homepage": "https://github.com/varbyte/treebound#readme",
   "sideEffects": false,
+  "publishConfig": {
+    "registry": "https://pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/"
+  },
   "engines": {
     "node": ">=18"
   },

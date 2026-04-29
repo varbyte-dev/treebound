@@ -82,12 +82,38 @@ con la nomenclatura de Web Components. Actualiza tus subclases de TreeBoundEleme
 
 ## Secrets requeridos en GitHub
 
-El workflow de release necesita dos secrets configurados en **Settings → Environments → npm-publish**:
+El workflow de release necesita dos secrets configurados en **Settings → Environments → `azure-publish`**:
 
-| Secret | Obtener de |
-|---|---|
-| `NPM_TOKEN` | npmjs.com → Access Tokens → Automation token |
-| `GH_TOKEN` | GitHub → Settings → Developer settings → Personal access tokens (classic) con permisos `repo` + `write:packages` |
+| Secret | Obtener de | Permisos necesarios |
+|---|---|---|
+| `AZURE_ARTIFACTS_PAT` | Azure DevOps → User Settings → Personal Access Tokens | **Packaging: Read & Write** |
+| `GH_TOKEN` | GitHub → Settings → Developer settings → Personal access tokens (classic) | `repo` + `write:packages` |
+
+### Cómo generar el PAT de Azure DevOps
+
+1. Ir a `https://dev.azure.com/varbytedev` → icono de usuario (arriba derecha) → **Personal Access Tokens**
+2. **New Token** → nombre: `github-actions-treebound`
+3. Scope: `Packaging` → marcar **Read & Write**
+4. Expiration: 1 año (máximo recomendado — poner recordatorio para renovar)
+5. Copiar el token generado → guardarlo en GitHub como secret `AZURE_ARTIFACTS_PAT`
+
+> **El token NO va en base64 en el secret.** El workflow lo codifica automáticamente.  
+> Solo pega el token raw tal como lo genera Azure DevOps.
+
+### Instalación local del paquete
+
+Para instalar desde el feed privado en una máquina local, el `.npmrc` del proyecto ya tiene la URL del registry. Solo necesitas autenticarte una vez:
+
+```bash
+# Obtener las credenciales para el feed (requiere Azure CLI o vsts-npm-auth)
+npx vsts-npm-auth -config .npmrc
+
+# O manualmente: añadir a ~/.npmrc (NO al .npmrc del proyecto)
+# //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:_password=<BASE64_DE_:TU_PAT>
+# //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:username=varbytedev
+# //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:email=tu@email.com
+# //pkgs.dev.azure.com/varbytedev/_packaging/varbytedev/npm/registry/:always-auth=true
+```
 
 > **Por qué `GH_TOKEN` en lugar de `GITHUB_TOKEN`?**  
 > `GITHUB_TOKEN` generado automáticamente por Actions NO puede disparar otros workflows.  
